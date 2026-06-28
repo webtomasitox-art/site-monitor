@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מצב האתר · Highlife Glamour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F6F8;
+    --surface: #FFFFFF;
+    --ink: #1B2230;
+    --muted: #6B7280;
+    --line: #E6E9EF;
+    --alert: #C9711A;
+    --alert-soft: #FBEEDD;
+    --ok: #2E8F63;
+    --ok-soft: #E4F1EA;
+    --deep: #232C3D;
+    --shadow: 0 1px 2px rgba(27,34,48,.04), 0 8px 24px rgba(27,34,48,.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Assistant', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== רצועת סטטוס עליונה ===== */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    padding: 20px clamp(16px, 5vw, 48px);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .pulse {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--ok); flex-shrink: 0;
+    box-shadow: 0 0 0 0 rgba(46,143,99,.5);
+    animation: pulse 2.6s infinite;
+  }
+  .pulse.alert { background: var(--alert); box-shadow: 0 0 0 0 rgba(201,113,26,.5); }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(46,143,99,.45); }
+    70% { box-shadow: 0 0 0 12px rgba(46,143,99,0); }
+    100% { box-shadow: 0 0 0 0 rgba(46,143,99,0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+  .brand h1 {
+    font-family: 'Frank Ruhl Libre', serif;
+    font-weight: 700; font-size: 22px; margin: 0; letter-spacing: -.01em;
+  }
+  .brand-sub { margin: 0; color: var(--muted); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+  .status { text-align: left; }
+  .status-label { font-size: 13px; color: var(--muted); }
+  .status-value { font-weight: 600; font-size: 15px; }
+
+  /* ===== אזור ראשי ===== */
+  main { padding: clamp(20px, 5vw, 48px); max-width: 1180px; margin: 0 auto; }
+  .section-head {
+    display: flex; align-items: baseline; gap: 12px;
+    margin: 0 0 20px; padding-bottom: 14px; border-bottom: 1px solid var(--line);
+  }
+  .section-head h2 {
+    font-family: 'Frank Ruhl Libre', serif; font-weight: 500;
+    font-size: 19px; margin: 0;
+  }
+  .count { color: var(--muted); font-size: 14px; }
+
+  .grid {
+    display: grid; gap: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; overflow: hidden; cursor: pointer;
+    box-shadow: var(--shadow); text-align: inherit;
+    transition: transform .15s ease, box-shadow .15s ease;
+    padding: 0; font: inherit; color: inherit; width: 100%;
+  }
+  .card:hover, .card:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(27,34,48,.06), 0 14px 34px rgba(27,34,48,.1);
+    outline: none;
+  }
+  .card:focus-visible { border-color: var(--alert); }
+  .thumb {
+    height: 168px; width: 100%; object-fit: cover; object-position: top;
+    background: var(--bg); display: block; border-bottom: 1px solid var(--line);
+  }
+  .card-body { padding: 14px 16px 16px; }
+  .card-time { font-weight: 600; font-size: 15px; margin: 0 0 8px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    font-size: 12.5px; padding: 3px 9px; border-radius: 999px;
+    background: var(--alert-soft); color: var(--alert); font-weight: 600;
+  }
+  .tag.where { background: #EEF1F6; color: var(--deep); }
+  .card-site { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+
+  /* ===== מצב ריק ===== */
+  .empty {
+    text-align: center; padding: 72px 24px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  }
+  .empty .ring {
+    width: 56px; height: 56px; margin: 0 auto 18px; border-radius: 50%;
+    background: var(--ok-soft); display: grid; place-items: center;
+    color: var(--ok); font-size: 26px;
+  }
+  .empty h3 { font-family: 'Frank Ruhl Libre', serif; font-weight: 500; font-size: 20px; margin: 0 0 8px; }
+  .empty p { color: var(--muted); margin: 0; }
+
+  /* ===== תצוגה גדולה (לייטבוקס) ===== */
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(20,25,35,.72);
+    display: none; z-index: 50; padding: 24px;
+    backdrop-filter: blur(2px);
+  }
+  .lightbox.open { display: flex; flex-direction: column; align-items: center; }
+  .lb-bar {
+    width: 100%; max-width: 980px; display: flex; align-items: center;
+    justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .lb-tabs { display: flex; gap: 6px; background: rgba(255,255,255,.14); padding: 4px; border-radius: 10px; }
+  .lb-tab {
+    border: 0; background: transparent; color: #fff; font: inherit; font-weight: 600;
+    padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: 14px;
+  }
+  .lb-tab.active { background: #fff; color: var(--ink); }
+  .lb-close {
+    border: 0; background: rgba(255,255,255,.16); color: #fff; font: inherit;
+    width: 40px; height: 40px; border-radius: 10px; cursor: pointer; font-size: 20px;
+  }
+  .lb-close:hover { background: rgba(255,255,255,.28); }
+  .lb-stage {
+    background: #fff; border-radius: 12px; overflow: auto;
+    max-width: 980px; width: 100%; flex: 1; min-height: 0;
+  }
+  .lb-stage img { width: 100%; display: block; }
+
+  @media (max-width: 520px) {
+    .status { text-align: right; width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="pulse" id="pulse"></span>
+      <div>
+        <h1>מצב האתר</h1>
+        <p class="brand-sub">Highlife Glamour</p>
+      </div>
+    </div>
+    <div class="status">
+      <div class="status-label">בדיקה אחרונה</div>
+      <div class="status-value" id="lastCheck">טוען…</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="section-head">
+      <h2>שינויים שזוהו</h2>
+      <span class="count" id="count"></span>
+    </div>
+    <div id="content"></div>
+  </main>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="צפייה בשינוי">
+    <div class="lb-bar">
+      <div class="lb-tabs" id="lbTabs">
+        <button class="lb-tab active" data-view="marked">מסומן</button>
+        <button class="lb-tab" data-view="after">אחרי</button>
+        <button class="lb-tab" data-view="before">לפני</button>
+        <button class="lb-tab" data-view="diff">הבדלים</button>
+      </div>
+      <button class="lb-close" id="lbClose" aria-label="סגירה">×</button>
+    </div>
+    <div class="lb-stage"><img id="lbImg" alt="צילום השינוי"></div>
+  </div>
+
+<script>
+  const fmt = (iso) => {
+    if (!iso) return 'טרם בוצעה';
+    try {
+      return new Date(iso).toLocaleString('he-IL', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    } catch { return iso; }
+  };
+  const bust = () => '?t=' + Date.now();
+
+  async function load() {
+    let data = [], status = {};
+    try { data = await (await fetch('data.json' + bust())).json(); } catch {}
+    try { status = await (await fetch('status.json' + bust())).json(); } catch {}
+
+    document.getElementById('lastCheck').textContent = fmt(status.checkedAt);
+
+    // נקודת הדופק: ענבר אם זוהה שינוי בבדיקה האחרונה, אחרת ירוק.
+    const pulse = document.getElementById('pulse');
+    if (status.changesFound > 0) pulse.classList.add('alert');
+
+    const content = document.getElementById('content');
+    const count = document.getElementById('count');
+
+    if (!data.length) {
+      count.textContent = '';
+      content.innerHTML =
+        '<div class="empty"><div class="ring">✓</div>' +
+        '<h3>הכול שקט</h3><p>לא זוהו שינויים. ברגע שמשהו ישתנה באתר, הוא יופיע כאן.</p></div>';
+      return;
+    }
+
+    count.textContent = '(' + data.length + ')';
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+
+    data.forEach((item) => {
+      const card = document.createElement('button');
+      card.className = 'card';
+      const where = item.percentFromTop != null
+        ? '<span class="tag where">בערך ' + item.percentFromTop + '% מהראש</span>' : '';
+      card.innerHTML =
+        '<img class="thumb" loading="lazy" src="' + item.folder + '/marked.png" alt="תצוגה מקדימה">' +
+        '<div class="card-body">' +
+          '<p class="card-time">' + fmt(item.time) + '</p>' +
+          '<div class="tags"><span class="tag">' + item.numDiff.toLocaleString('he-IL') + ' פיקסלים</span>' + where + '</div>' +
+          '<p class="card-site">' + item.site + '</p>' +
+        '</div>';
+      card.addEventListener('click', () => openLightbox(item));
+      grid.appendChild(card);
+    });
+
+    content.innerHTML = '';
+    content.appendChild(grid);
+  }
+
+  // ===== תצוגה גדולה =====
+  const lb = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lbImg');
+  const lbTabs = document.getElementById('lbTabs');
+  let current = null;
+
+  function showView(view) {
+    if (!current) return;
+    lbImg.src = current.folder + '/' + view + '.png';
+    [...lbTabs.children].forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  }
+  function openLightbox(item) {
+    current = item;
+    showView('marked');
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+    current = null;
+  }
+  lbTabs.addEventListener('click', (e) => {
+    if (e.target.dataset.view) showView(e.target.dataset.view);
+  });
+  document.getElementById('lbClose').addEventListener('click', closeLightbox);
+  lb.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+  load();
+</script>
+</body>
+</html>
