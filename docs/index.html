@@ -225,6 +225,10 @@
             <input class="txt grow" id="newUrl" placeholder="https://...">
             <button class="btn" id="addSite">הוסף</button>
           </div>
+          <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13.5px; cursor:pointer;">
+            <input type="checkbox" id="newSitemap">
+            סרוק את כל האתר לפי מפת אתר (sitemap)
+          </label>
         </div>
 
         <div class="grp">
@@ -421,6 +425,13 @@
       row.className = 'site-row';
       row.innerHTML = '<div class="info"><div class="nm"></div><div class="ur"></div></div>';
       row.querySelector('.nm').textContent = s.name;
+      if (s.sitemap) {
+        const b = document.createElement('span');
+        b.textContent = ' · מפת אתר';
+        b.style.color = 'var(--alert)';
+        b.style.fontWeight = '600';
+        row.querySelector('.nm').appendChild(b);
+      }
       row.querySelector('.ur').textContent = s.url;
       const del = document.createElement('button');
       del.className = 'del'; del.textContent = '×'; del.title = 'מחיקה';
@@ -433,11 +444,15 @@
   document.getElementById('addSite').addEventListener('click', () => {
     const name = document.getElementById('newName').value.trim();
     const url = document.getElementById('newUrl').value.trim();
+    const sitemap = document.getElementById('newSitemap').checked;
     if (!name || !url) { say(toastErr, 'מלאו גם שם וגם כתובת.'); return; }
     if (!/^https?:\/\//.test(url)) { say(toastErr, 'הכתובת צריכה להתחיל ב-https://'); return; }
-    sitesState.push({ name, url });
+    const entry = { name, url };
+    if (sitemap) entry.sitemap = true;
+    sitesState.push(entry);
     document.getElementById('newName').value = '';
     document.getElementById('newUrl').value = '';
+    document.getElementById('newSitemap').checked = false;
     renderSites();
   });
 
