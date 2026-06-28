@@ -17,6 +17,7 @@ const MIN_CHANGED_PIXELS = 50;  // כמה פיקסלים צריכים לזוז �
 const VIEWPORT = { width: 1280, height: 800 };
 const PAGE_SETTLE_MS = 4000;    // המתנה אחרי טעינה לפני צילום.
 const MAX_HISTORY = 30;         // כמה שינויים אחרונים לשמור בדשבורד.
+const MAX_PAGES = 25;           // מקסימום עמודים לסריקה כשבוחרים "מפת אתר".
 
 // =================================================================
 // מכאן והלאה — אין צורך לשנות כלום.
@@ -36,6 +37,71 @@ function loadSites() {
   } catch {
     return [];
   }
+}
+
+// קורא טקסט מכתובת (לקריאת מפת אתר).
+async function fetchText(url) {
+  const res = await fetch(url, { headers: { 'User-Agent': 'site-monitor' } });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.text();
+}
+
+// מחלץ כתובות מתוך תוכן XML של מפת אתר.
+function extractLocs(xml) {
+  const locs = [];
+  const re = /<loc>\s*([^<]+?)\s*<\/loc>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) locs.push(m[1].trim());
+  return locs;
+}
+
+// משיג את רשימת העמודים ממפת האתר (כולל טיפול במפת-על המצביעה על מפות נוספות).
+async function getSitemapUrls(origin, max) {
+  let xml;
+  try { xml = await fetchText(origin + '/sitemap.xml'); }
+  catch { return []; }
+  let locs = extractLocs(xml);
+  if (/<sitemapindex/i.test(xml)) {
+    const pages = [];
+    for (const sm of locs.slice(0, 5)) {
+      try { pages.push(...extractLocs(await fetchText(sm))); } catch {}
+      if (pages.length >= max) break;
+    }
+    locs = pages;
+  }
+  return locs.slice(0, max);
+}
+
+// יוצר שם מזהה ייחודי לעמוד לפי הכתובת שלו.
+function slugify(url, base) {
+  try {
+    const u = new URL(url);
+    let p = u.pathname.replace(/^\/+|\/+$/g, '');
+    if (!p) return base + '_home';
+    return base + '_' + p.replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 60);
+  } catch { return base + '_' + Math.random().toString(36).slice(2, 8); }
+}
+
+// מרחיב כל אתר לרשימת עמודים לבדיקה (אתר מסומן "מפת אתר" → כל העמודים).
+async function expandSites(sites) {
+  const tasks = [];
+  for (const s of sites) {
+    if (s.sitemap) {
+      let origin;
+      try { origin = new URL(s.url).origin; } catch { origin = s.url; }
+      const urls = await getSitemapUrls(origin, MAX_PAGES);
+      if (!urls.length) {
+        console.log('  (לא נמצאה מפת אתר ל-' + s.name + ', בודק רק את העמוד עצמו)');
+        tasks.push({ name: s.name, url: s.url });
+      } else {
+        console.log('  נמצאו ' + urls.length + ' עמודים במפת האתר של ' + s.name);
+        for (const u of urls) tasks.push({ name: slugify(u, s.name), url: u });
+      }
+    } else {
+      tasks.push({ name: s.name, url: s.url });
+    }
+  }
+  return tasks;
 }
 
 function padTo(png, width, height) {
@@ -112,7 +178,7 @@ async function run() {
   let history = readHistory();
   let changesFound = 0;
   const checkedAt = new Date().toISOString();
-  const SITES = loadSites();
+  const SITES = await expandSites(loadSites());
 
   for (const site of SITES) {
     console.log(`\nבודק את "${site.name}"  (${site.url}) ...`);
