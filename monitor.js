@@ -1,505 +1,189 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>מצב האתר · Highlife Glamour</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@500;700&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #F4F6F8; --surface: #FFFFFF; --ink: #1B2230; --muted: #6B7280;
-    --line: #E6E9EF; --alert: #C9711A; --alert-soft: #FBEEDD;
-    --ok: #2E8F63; --ok-soft: #E4F1EA; --deep: #232C3D;
-    --shadow: 0 1px 2px rgba(27,34,48,.04), 0 8px 24px rgba(27,34,48,.06);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: 'Assistant', system-ui, sans-serif; font-size: 16px; line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  .topbar {
-    background: var(--surface); border-bottom: 1px solid var(--line);
-    padding: 18px clamp(16px, 5vw, 48px); display: flex; flex-wrap: wrap;
-    gap: 16px 20px; align-items: center; justify-content: space-between;
-  }
-  .brand { display: flex; align-items: center; gap: 14px; }
-  .pulse {
-    width: 14px; height: 14px; border-radius: 50%; background: var(--ok);
-    flex-shrink: 0; animation: pulse 2.6s infinite;
-  }
-  .pulse.alert { background: var(--alert); }
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(46,143,99,.45); }
-    70% { box-shadow: 0 0 0 12px rgba(46,143,99,0); }
-    100% { box-shadow: 0 0 0 0 rgba(46,143,99,0); }
-  }
-  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
-  .brand h1 { font-family: 'Frank Ruhl Libre', serif; font-weight: 700; font-size: 22px; margin: 0; }
-  .brand-sub { margin: 0; color: var(--muted); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
-  .bar-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .status { text-align: left; margin-inline-end: 4px; }
-  .status-label { font-size: 12px; color: var(--muted); }
-  .status-value { font-weight: 600; font-size: 14px; }
+// ===================================================================
+//  מנטר שינויים ויזואליים באתר — גרסת ענן (GitHub Actions)
+//  רץ אוטומטית, מצלם את האתר, משווה, ושומר תוצאות לדשבורד.
+// ===================================================================
 
-  .btn {
-    font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
-    border-radius: 10px; padding: 9px 16px; border: 1px solid var(--line);
-    background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 7px;
-    transition: background .15s, border-color .15s, transform .1s;
+const { chromium } = require('playwright');
+const fs = require('fs');
+const path = require('path');
+const { PNG } = require('pngjs');
+const pixelmatch = require('pixelmatch');
+
+// ============ הגדרות ============
+// רשימת האתרים נטענת מהקובץ docs/sites.json (נערך דרך הדשבורד).
+
+const THRESHOLD = 0.1;          // רגישות צבע (0-1). נמוך = רגיש יותר.
+const MIN_CHANGED_PIXELS = 50;  // כמה פיקסלים צריכים לזוז כדי שייחשב שינוי.
+const VIEWPORT = { width: 1280, height: 800 };
+const PAGE_SETTLE_MS = 4000;    // המתנה אחרי טעינה לפני צילום.
+const MAX_HISTORY = 30;         // כמה שינויים אחרונים לשמור בדשבורד.
+
+// =================================================================
+// מכאן והלאה — אין צורך לשנות כלום.
+// =================================================================
+
+const BASELINE_DIR = path.join(__dirname, 'baseline');
+const DOCS_DIR = path.join(__dirname, 'docs');
+const RESULTS_DIR = path.join(DOCS_DIR, 'results');
+const DATA_FILE = path.join(DOCS_DIR, 'data.json');
+const SITES_FILE = path.join(DOCS_DIR, 'sites.json');
+
+// טוען את רשימת האתרים לבדיקה מתוך sites.json.
+function loadSites() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(SITES_FILE, 'utf8'));
+    return Array.isArray(cfg.sites) ? cfg.sites : [];
+  } catch {
+    return [];
   }
-  .btn:hover { background: #F0F2F6; }
-  .btn:active { transform: translateY(1px); }
-  .btn.primary { background: var(--deep); color: #fff; border-color: var(--deep); }
-  .btn.primary:hover { background: #1a2230; }
-  .btn:disabled { opacity: .55; cursor: not-allowed; }
-  .btn .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+}
 
-  main { padding: clamp(20px, 5vw, 48px); max-width: 1180px; margin: 0 auto; }
-  .toast {
-    max-width: 1180px; margin: 0 auto clamp(8px,3vw,16px); padding: 0 clamp(16px,5vw,48px);
+function padTo(png, width, height) {
+  if (png.width === width && png.height === height) return png;
+  const out = new PNG({ width, height });
+  for (let i = 0; i < out.data.length; i += 4) {
+    out.data[i] = 255; out.data[i + 1] = 255; out.data[i + 2] = 255; out.data[i + 3] = 255;
   }
-  .toast div {
-    border-radius: 12px; padding: 12px 16px; font-weight: 600; font-size: 14px; display: none;
-  }
-  .toast .ok { background: var(--ok-soft); color: var(--ok); }
-  .toast .err { background: #FBE7E7; color: #B23B3B; }
-  .toast .info { background: #EAF0F8; color: var(--deep); }
+  PNG.bitblt(png, out, 0, 0, png.width, png.height, 0, 0);
+  return out;
+}
 
-  .section-head {
-    display: flex; align-items: baseline; gap: 12px; margin: 0 0 20px;
-    padding-bottom: 14px; border-bottom: 1px solid var(--line);
-  }
-  .section-head h2 { font-family: 'Frank Ruhl Libre', serif; font-weight: 500; font-size: 19px; margin: 0; }
-  .count { color: var(--muted); font-size: 14px; }
-  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-  .card {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    overflow: hidden; cursor: pointer; box-shadow: var(--shadow); text-align: inherit;
-    transition: transform .15s ease, box-shadow .15s ease; padding: 0; font: inherit; color: inherit; width: 100%;
-  }
-  .card:hover, .card:focus-visible {
-    transform: translateY(-2px);
-    box-shadow: 0 2px 4px rgba(27,34,48,.06), 0 14px 34px rgba(27,34,48,.1); outline: none;
-  }
-  .card:focus-visible { border-color: var(--alert); }
-  .thumb {
-    height: 168px; width: 100%; object-fit: cover; object-position: top;
-    background: var(--bg); display: block; border-bottom: 1px solid var(--line);
-  }
-  .card-body { padding: 14px 16px 16px; }
-  .card-time { font-weight: 600; font-size: 15px; margin: 0 0 8px; }
-  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
-  .tag { font-size: 12.5px; padding: 3px 9px; border-radius: 999px; background: var(--alert-soft); color: var(--alert); font-weight: 600; }
-  .tag.where { background: #EEF1F6; color: var(--deep); }
-  .card-site { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
-  .empty {
-    text-align: center; padding: 72px 24px; background: var(--surface);
-    border: 1px solid var(--line); border-radius: 16px;
-  }
-  .empty .ring {
-    width: 56px; height: 56px; margin: 0 auto 18px; border-radius: 50%;
-    background: var(--ok-soft); display: grid; place-items: center; color: var(--ok); font-size: 26px;
-  }
-  .empty h3 { font-family: 'Frank Ruhl Libre', serif; font-weight: 500; font-size: 20px; margin: 0 0 8px; }
-  .empty p { color: var(--muted); margin: 0; }
-
-  /* ===== חלונות (לייטבוקס + הגדרות) ===== */
-  .overlay {
-    position: fixed; inset: 0; background: rgba(20,25,35,.72); display: none;
-    z-index: 50; padding: 24px; backdrop-filter: blur(2px);
-  }
-  .overlay.open { display: flex; flex-direction: column; align-items: center; }
-  .lb-bar { width: 100%; max-width: 980px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-  .lb-tabs { display: flex; gap: 6px; background: rgba(255,255,255,.14); padding: 4px; border-radius: 10px; }
-  .lb-tab { border: 0; background: transparent; color: #fff; font: inherit; font-weight: 600; padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: 14px; }
-  .lb-tab.active { background: #fff; color: var(--ink); }
-  .icon-btn { border: 0; background: rgba(255,255,255,.16); color: #fff; font: inherit; width: 40px; height: 40px; border-radius: 10px; cursor: pointer; font-size: 20px; }
-  .icon-btn:hover { background: rgba(255,255,255,.28); }
-  .lb-stage { background: #fff; border-radius: 12px; overflow: auto; max-width: 980px; width: 100%; flex: 1; min-height: 0; }
-  .lb-stage img { width: 100%; display: block; }
-
-  /* ===== פאנל הגדרות ===== */
-  .sheet {
-    background: var(--surface); border-radius: 16px; width: 100%; max-width: 560px;
-    max-height: 100%; overflow: auto; box-shadow: 0 24px 60px rgba(0,0,0,.3);
-  }
-  .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); }
-  .sheet-head h2 { font-family: 'Frank Ruhl Libre', serif; font-weight: 500; font-size: 20px; margin: 0; }
-  .sheet-head .icon-btn { background: #EEF1F6; color: var(--ink); }
-  .sheet-body { padding: 8px 24px 24px; }
-  .grp { padding: 18px 0; border-bottom: 1px solid var(--line); }
-  .grp:last-child { border-bottom: 0; }
-  .grp h3 { font-size: 15px; margin: 0 0 4px; }
-  .grp .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
-  .grp .hint a { color: var(--alert); }
-  label.fld { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-  input.txt, select.txt {
-    width: 100%; font: inherit; font-size: 14px; padding: 9px 12px;
-    border: 1px solid var(--line); border-radius: 9px; background: #FCFCFD; color: var(--ink);
-  }
-  input.txt:focus, select.txt:focus { outline: none; border-color: var(--deep); }
-  .row { display: flex; gap: 8px; align-items: flex-end; }
-  .row .grow { flex: 1; }
-  .site-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #FCFCFD; }
-  .site-row .info { flex: 1; min-width: 0; }
-  .site-row .nm { font-weight: 600; font-size: 14px; }
-  .site-row .ur { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .site-row .del { border: 0; background: #FBE7E7; color: #B23B3B; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 16px; flex-shrink: 0; }
-  .conn { font-size: 13px; font-weight: 600; margin-top: 8px; }
-  .conn.on { color: var(--ok); }
-  .conn.off { color: var(--muted); }
-  @media (max-width: 560px) { .status { text-align: right; } }
-</style>
-</head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="pulse" id="pulse"></span>
-      <div><h1>מצב האתר</h1><p class="brand-sub">Highlife Glamour</p></div>
-    </div>
-    <div class="bar-actions">
-      <div class="status">
-        <div class="status-label">בדיקה אחרונה</div>
-        <div class="status-value" id="lastCheck">טוען…</div>
-      </div>
-      <button class="btn primary" id="scanBtn"><span class="dot"></span>סרוק עכשיו</button>
-      <button class="btn" id="openSettings">⚙ הגדרות</button>
-    </div>
-  </header>
-
-  <div class="toast">
-    <div id="toastOk" class="ok"></div>
-    <div id="toastErr" class="err"></div>
-    <div id="toastInfo" class="info"></div>
-  </div>
-
-  <main>
-    <div class="section-head"><h2>שינויים שזוהו</h2><span class="count" id="count"></span></div>
-    <div id="content"></div>
-  </main>
-
-  <!-- תצוגה גדולה -->
-  <div class="overlay" id="lightbox" role="dialog" aria-modal="true" aria-label="צפייה בשינוי">
-    <div class="lb-bar">
-      <div class="lb-tabs" id="lbTabs">
-        <button class="lb-tab active" data-view="marked">מסומן</button>
-        <button class="lb-tab" data-view="after">אחרי</button>
-        <button class="lb-tab" data-view="before">לפני</button>
-        <button class="lb-tab" data-view="diff">הבדלים</button>
-      </div>
-      <button class="icon-btn" id="lbClose" aria-label="סגירה">×</button>
-    </div>
-    <div class="lb-stage"><img id="lbImg" alt="צילום השינוי"></div>
-  </div>
-
-  <!-- הגדרות -->
-  <div class="overlay" id="settings" role="dialog" aria-modal="true" aria-label="הגדרות">
-    <div class="sheet">
-      <div class="sheet-head">
-        <h2>הגדרות</h2>
-        <button class="icon-btn" id="setClose" aria-label="סגירה">×</button>
-      </div>
-      <div class="sheet-body">
-
-        <div class="grp">
-          <h3>חיבור ל-GitHub</h3>
-          <p class="hint">כדי שהכפתורים יוכלו להפעיל סריקה ולשמור שינויים, צריך מפתח גישה אישי. הוא נשמר רק בדפדפן הזה. <a id="tokenHelp" href="#" >איך מפיקים מפתח?</a></p>
-          <label class="fld">מפתח גישה (Token)</label>
-          <div class="row">
-            <input class="txt grow" id="tokenInput" type="password" placeholder="מדביקים כאן את המפתח" autocomplete="off">
-            <button class="btn primary" id="saveToken">שמירה</button>
-          </div>
-          <div class="conn off" id="connStatus">לא מחובר</div>
-        </div>
-
-        <div class="grp">
-          <h3>אתרים במעקב</h3>
-          <p class="hint">האתרים שייבדקו בכל סריקה.</p>
-          <div id="siteList"></div>
-          <label class="fld">הוספת אתר</label>
-          <input class="txt" id="newName" placeholder="שם מזהה (למשל homepage)" style="margin-bottom:8px">
-          <div class="row">
-            <input class="txt grow" id="newUrl" placeholder="https://...">
-            <button class="btn" id="addSite">הוסף</button>
-          </div>
-        </div>
-
-        <div class="grp">
-          <h3>תדירות בדיקה אוטומטית</h3>
-          <p class="hint">כל כמה זמן המערכת תבדוק את האתרים לבד.</p>
-          <select class="txt" id="schedule">
-            <option value="0 * * * *">כל שעה</option>
-            <option value="0 */3 * * *">כל 3 שעות</option>
-            <option value="0 */6 * * *">כל 6 שעות</option>
-            <option value="0 */12 * * *">כל 12 שעות</option>
-            <option value="0 6 * * *">פעם ביום</option>
-          </select>
-        </div>
-
-        <div class="grp">
-          <button class="btn primary" id="saveAll" style="width:100%; justify-content:center; padding:12px;">שמירת ההגדרות</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<script>
-  // ===== זיהוי הפרויקט מתוך כתובת הדף =====
-  function detectRepo() {
-    const owner = location.hostname.split('.')[0];
-    const repo = location.pathname.split('/').filter(Boolean)[0] || '';
-    return { owner, repo };
-  }
-  const REPO = detectRepo();
-  const WORKFLOW = 'monitor.yml';
-  const API = 'https://api.github.com';
-
-  // ===== עזרי קידוד (תומך עברית) =====
-  const b64enc = (s) => btoa(unescape(encodeURIComponent(s)));
-  const b64dec = (b) => decodeURIComponent(escape(atob(b.replace(/\s/g, ''))));
-
-  // ===== ניהול מפתח =====
-  const getToken = () => localStorage.getItem('gh_token') || '';
-  const setToken = (t) => t ? localStorage.setItem('gh_token', t) : localStorage.removeItem('gh_token');
-
-  // ===== קריאות ל-GitHub =====
-  async function gh(path, opts = {}) {
-    const res = await fetch(API + path, {
-      ...opts,
-      headers: {
-        'Accept': 'application/vnd.github+json',
-        'Authorization': 'Bearer ' + getToken(),
-        ...(opts.headers || {}),
-      },
-    });
-    if (!res.ok) {
-      let msg = res.status + '';
-      try { const j = await res.json(); if (j.message) msg = j.message; } catch {}
-      throw new Error(msg);
+function findChangedBounds(diff) {
+  let minX = diff.width, minY = diff.height, maxX = -1, maxY = -1;
+  for (let y = 0; y < diff.height; y++) {
+    for (let x = 0; x < diff.width; x++) {
+      const i = (y * diff.width + x) * 4;
+      const r = diff.data[i], g = diff.data[i + 1], b = diff.data[i + 2];
+      if (r > 200 && g < 120 && b < 120) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
     }
-    return res.status === 204 ? null : res.json();
   }
-  async function getFile(p) {
-    const r = await gh('/repos/' + REPO.owner + '/' + REPO.repo + '/contents/' + p);
-    return { text: b64dec(r.content), sha: r.sha };
-  }
-  async function putFile(p, text, sha, message) {
-    return gh('/repos/' + REPO.owner + '/' + REPO.repo + '/contents/' + p, {
-      method: 'PUT',
-      body: JSON.stringify({ message, content: b64enc(text), sha }),
-    });
-  }
+  if (maxX < 0) return null;
+  return { minX, minY, maxX, maxY };
+}
 
-  // ===== הודעות =====
-  const toastOk = document.getElementById('toastOk');
-  const toastErr = document.getElementById('toastErr');
-  const toastInfo = document.getElementById('toastInfo');
-  function hideToasts() { [toastOk, toastErr, toastInfo].forEach(t => t.style.display = 'none'); }
-  function say(el, msg) { hideToasts(); el.textContent = msg; el.style.display = 'block';
-    if (el !== toastInfo) setTimeout(() => { el.style.display = 'none'; }, 6000); }
-
-  // ===== הצגת תוצאות =====
-  const fmt = (iso) => {
-    if (!iso) return 'טרם בוצעה';
-    try { return new Date(iso).toLocaleString('he-IL', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
-    catch { return iso; }
+function drawBox(png, bounds, pad, thickness) {
+  const x0 = Math.max(0, bounds.minX - pad);
+  const y0 = Math.max(0, bounds.minY - pad);
+  const x1 = Math.min(png.width - 1, bounds.maxX + pad);
+  const y1 = Math.min(png.height - 1, bounds.maxY + pad);
+  const setPx = (x, y) => {
+    if (x < 0 || y < 0 || x >= png.width || y >= png.height) return;
+    const i = (y * png.width + x) * 4;
+    png.data[i] = 255; png.data[i + 1] = 0; png.data[i + 2] = 0; png.data[i + 3] = 255;
   };
-  const bust = () => '?t=' + Date.now();
-
-  async function loadDashboard() {
-    let data = [], status = {};
-    try { data = await (await fetch('data.json' + bust())).json(); } catch {}
-    try { status = await (await fetch('status.json' + bust())).json(); } catch {}
-    document.getElementById('lastCheck').textContent = fmt(status.checkedAt);
-    document.getElementById('pulse').classList.toggle('alert', status.changesFound > 0);
-
-    const content = document.getElementById('content');
-    const count = document.getElementById('count');
-    if (!data.length) {
-      count.textContent = '';
-      content.innerHTML = '<div class="empty"><div class="ring">✓</div><h3>הכול שקט</h3><p>לא זוהו שינויים. ברגע שמשהו ישתנה באתר, הוא יופיע כאן.</p></div>';
-      return;
-    }
-    count.textContent = '(' + data.length + ')';
-    const grid = document.createElement('div');
-    grid.className = 'grid';
-    data.forEach((item) => {
-      const card = document.createElement('button');
-      card.className = 'card';
-      const where = item.percentFromTop != null ? '<span class="tag where">בערך ' + item.percentFromTop + '% מהראש</span>' : '';
-      card.innerHTML =
-        '<img class="thumb" loading="lazy" src="' + item.folder + '/marked.png" alt="תצוגה מקדימה">' +
-        '<div class="card-body"><p class="card-time">' + fmt(item.time) + '</p>' +
-        '<div class="tags"><span class="tag">' + item.numDiff.toLocaleString('he-IL') + ' פיקסלים</span>' + where + '</div>' +
-        '<p class="card-site">' + item.site + '</p></div>';
-      card.addEventListener('click', () => openLightbox(item));
-      grid.appendChild(card);
-    });
-    content.innerHTML = '';
-    content.appendChild(grid);
+  for (let t = 0; t < thickness; t++) {
+    for (let x = x0; x <= x1; x++) { setPx(x, y0 + t); setPx(x, y1 - t); }
+    for (let y = y0; y <= y1; y++) { setPx(x0 + t, y); setPx(x1 - t, y); }
   }
+}
 
-  // ===== לייטבוקס =====
-  const lb = document.getElementById('lightbox');
-  const lbImg = document.getElementById('lbImg');
-  const lbTabs = document.getElementById('lbTabs');
-  let current = null;
-  function showView(view) {
-    if (!current) return;
-    lbImg.src = current.folder + '/' + view + '.png';
-    [...lbTabs.children].forEach(b => b.classList.toggle('active', b.dataset.view === view));
+// קורא את היסטוריית השינויים הקיימת (אם יש).
+function readHistory() {
+  try {
+    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  } catch {
+    return [];
   }
-  function openLightbox(item) { current = item; showView('marked'); lb.classList.add('open'); document.body.style.overflow = 'hidden'; }
-  function closeLightbox() { lb.classList.remove('open'); document.body.style.overflow = ''; current = null; }
-  lbTabs.addEventListener('click', (e) => { if (e.target.dataset.view) showView(e.target.dataset.view); });
-  document.getElementById('lbClose').addEventListener('click', closeLightbox);
-  lb.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
+}
 
-  // ===== כפתור סריקה =====
-  const scanBtn = document.getElementById('scanBtn');
-  scanBtn.addEventListener('click', async () => {
-    if (!getToken()) { openSettings(); say(toastInfo, 'כדי לסרוק, חברו מפתח גישה בהגדרות.'); return; }
-    scanBtn.disabled = true;
-    const label = scanBtn.innerHTML;
-    scanBtn.innerHTML = 'מפעיל…';
+// שומר את ההיסטוריה, מוחק תיקיות ישנות שמעבר למגבלה.
+function writeHistory(history) {
+  const kept = history.slice(0, MAX_HISTORY);
+  const removed = history.slice(MAX_HISTORY);
+  for (const item of removed) {
+    const dir = path.join(DOCS_DIR, item.folder);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  fs.writeFileSync(DATA_FILE, JSON.stringify(kept, null, 2));
+}
+
+async function run() {
+  fs.mkdirSync(BASELINE_DIR, { recursive: true });
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: VIEWPORT });
+
+  let history = readHistory();
+  let changesFound = 0;
+  const checkedAt = new Date().toISOString();
+  const SITES = loadSites();
+
+  for (const site of SITES) {
+    console.log(`\nבודק את "${site.name}"  (${site.url}) ...`);
     try {
-      await gh('/repos/' + REPO.owner + '/' + REPO.repo + '/actions/workflows/' + WORKFLOW + '/dispatches',
-        { method: 'POST', body: JSON.stringify({ ref: 'main' }) });
-      say(toastOk, 'הסריקה הופעלה! התוצאה תופיע כאן בעוד 2–4 דקות. רעננו את הדף.');
-    } catch (e) {
-      say(toastErr, 'הסריקה לא הופעלה: ' + e.message + '. בדקו שהמפתח תקין ושיש לו הרשאות.');
-    } finally {
-      scanBtn.disabled = false; scanBtn.innerHTML = label;
-    }
-  });
+      await page.goto(site.url, { waitUntil: 'load', timeout: 60000 });
+      await page.waitForTimeout(PAGE_SETTLE_MS);
+      const currentBuf = await page.screenshot({ fullPage: true });
+      const baselinePath = path.join(BASELINE_DIR, `${site.name}.png`);
 
-  // ===== הגדרות =====
-  const settings = document.getElementById('settings');
-  const siteListEl = document.getElementById('siteList');
-  let sitesState = [];     // רשימת האתרים בעריכה
-  let sitesSha = null;     // לשמירה דרך API
-  let workflowSha = null;  // לשמירת תדירות
+      if (fs.existsSync(baselinePath)) {
+        const beforePng = PNG.sync.read(fs.readFileSync(baselinePath));
+        const afterPng = PNG.sync.read(currentBuf);
+        const width = Math.max(beforePng.width, afterPng.width);
+        const height = Math.max(beforePng.height, afterPng.height);
+        const a = padTo(beforePng, width, height);
+        const b = padTo(afterPng, width, height);
+        const diff = new PNG({ width, height });
+        const numDiff = pixelmatch(a.data, b.data, diff.data, width, height, { threshold: THRESHOLD });
 
-  function openSettings() { settings.classList.add('open'); document.body.style.overflow = 'hidden'; refreshConn(); loadSettingsData(); }
-  function closeSettings() { settings.classList.remove('open'); document.body.style.overflow = ''; }
-  document.getElementById('openSettings').addEventListener('click', openSettings);
-  document.getElementById('setClose').addEventListener('click', closeSettings);
+        if (numDiff > MIN_CHANGED_PIXELS) {
+          changesFound++;
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const folderName = `results/${site.name}__${stamp}`;
+          const folder = path.join(DOCS_DIR, folderName);
+          fs.mkdirSync(folder, { recursive: true });
+          fs.writeFileSync(path.join(folder, 'before.png'), PNG.sync.write(a));
+          fs.writeFileSync(path.join(folder, 'after.png'), PNG.sync.write(b));
+          fs.writeFileSync(path.join(folder, 'diff.png'), PNG.sync.write(diff));
 
-  function refreshConn() {
-    const el = document.getElementById('connStatus');
-    if (getToken()) { el.textContent = '● מחובר'; el.className = 'conn on'; document.getElementById('tokenInput').value = ''; }
-    else { el.textContent = 'לא מחובר'; el.className = 'conn off'; }
-  }
+          const marked = new PNG({ width, height });
+          b.data.copy(marked.data);
+          const bounds = findChangedBounds(diff);
+          let percentFromTop = null;
+          if (bounds) {
+            drawBox(marked, bounds, 20, 6);
+            percentFromTop = Math.round((bounds.minY / height) * 100);
+          }
+          fs.writeFileSync(path.join(folder, 'marked.png'), PNG.sync.write(marked));
 
-  document.getElementById('saveToken').addEventListener('click', async () => {
-    const t = document.getElementById('tokenInput').value.trim();
-    if (!t) { say(toastErr, 'הדביקו מפתח לפני שמירה.'); return; }
-    setToken(t);
-    try {
-      await gh('/repos/' + REPO.owner + '/' + REPO.repo);
-      refreshConn(); loadSettingsData(); say(toastOk, 'המפתח נשמר והחיבור פעיל.');
-    } catch (e) {
-      setToken(''); refreshConn(); say(toastErr, 'המפתח לא עבד: ' + e.message);
-    }
-  });
+          // מוסיף את השינוי לראש ההיסטוריה (החדש ביותר ראשון).
+          history.unshift({
+            site: site.name,
+            url: site.url,
+            time: new Date().toISOString(),
+            numDiff,
+            percentFromTop,
+            folder: folderName,
+          });
 
-  document.getElementById('tokenHelp').addEventListener('click', (e) => {
-    e.preventDefault();
-    say(toastInfo, 'ב-GitHub: Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate. סמנו את ההרשאות repo ו-workflow.');
-  });
-
-  function renderSites() {
-    siteListEl.innerHTML = '';
-    if (!sitesState.length) { siteListEl.innerHTML = '<p class="hint">אין אתרים עדיין.</p>'; return; }
-    sitesState.forEach((s, i) => {
-      const row = document.createElement('div');
-      row.className = 'site-row';
-      row.innerHTML = '<div class="info"><div class="nm"></div><div class="ur"></div></div>';
-      row.querySelector('.nm').textContent = s.name;
-      row.querySelector('.ur').textContent = s.url;
-      const del = document.createElement('button');
-      del.className = 'del'; del.textContent = '×'; del.title = 'מחיקה';
-      del.addEventListener('click', () => { sitesState.splice(i, 1); renderSites(); });
-      row.appendChild(del);
-      siteListEl.appendChild(row);
-    });
-  }
-
-  document.getElementById('addSite').addEventListener('click', () => {
-    const name = document.getElementById('newName').value.trim();
-    const url = document.getElementById('newUrl').value.trim();
-    if (!name || !url) { say(toastErr, 'מלאו גם שם וגם כתובת.'); return; }
-    if (!/^https?:\/\//.test(url)) { say(toastErr, 'הכתובת צריכה להתחיל ב-https://'); return; }
-    sitesState.push({ name, url });
-    document.getElementById('newName').value = '';
-    document.getElementById('newUrl').value = '';
-    renderSites();
-  });
-
-  async function loadSettingsData() {
-    // אתרים — מנסה דרך API (כדי לקבל sha לשמירה), אחרת קריאה רגילה.
-    try {
-      if (getToken()) {
-        const f = await getFile('docs/sites.json');
-        sitesSha = f.sha;
-        sitesState = (JSON.parse(f.text).sites || []).slice();
-      } else {
-        const r = await fetch('sites.json' + bust());
-        sitesState = ((await r.json()).sites || []).slice();
-      }
-    } catch { sitesState = []; }
-    renderSites();
-
-    // תדירות — קורא את ה-cron הנוכחי מקובץ ההפעלה.
-    if (getToken()) {
-      try {
-        const f = await getFile('.github/workflows/' + WORKFLOW);
-        workflowSha = f.sha;
-        const m = f.text.match(/cron:\s*'([^']*)'/);
-        if (m) {
-          const sel = document.getElementById('schedule');
-          [...sel.options].forEach(o => { if (o.value === m[1]) sel.value = m[1]; });
+          // הצילום הנוכחי הופך לבסיס החדש (כדי לא להתריע שוב על אותו דבר).
+          fs.writeFileSync(baselinePath, currentBuf);
+          console.log(`  ⚠️  זוהה שינוי! ${numDiff} פיקסלים השתנו.`);
+        } else {
+          console.log(`  ✓ אין שינוי משמעותי (${numDiff} פיקסלים בלבד).`);
         }
-      } catch {}
+      } else {
+        fs.writeFileSync(baselinePath, currentBuf);
+        console.log('  📷 צילום ראשון נשמר כבסיס להשוואות הבאות.');
+      }
+    } catch (err) {
+      console.log(`  ❌ שגיאה בבדיקת "${site.name}": ${err.message}`);
     }
   }
 
-  document.getElementById('saveAll').addEventListener('click', async () => {
-    if (!getToken()) { say(toastErr, 'חברו מפתח גישה לפני שמירה.'); return; }
-    const btn = document.getElementById('saveAll');
-    btn.disabled = true; btn.textContent = 'שומר…';
-    try {
-      // שמירת רשימת האתרים
-      const newSites = JSON.stringify({ sites: sitesState }, null, 2) + '\n';
-      const put = await putFile('docs/sites.json', newSites, sitesSha, 'עדכון רשימת אתרים מהדשבורד');
-      sitesSha = put.content.sha;
+  // שומר חותמת "נבדק לאחרונה" כדי שהדשבורד יציג זאת.
+  fs.writeFileSync(path.join(DOCS_DIR, 'status.json'),
+    JSON.stringify({ checkedAt, changesFound }, null, 2));
 
-      // שמירת התדירות (עריכת ה-cron בקובץ ההפעלה)
-      const sched = document.getElementById('schedule').value;
-      const wf = await getFile('.github/workflows/' + WORKFLOW);
-      workflowSha = wf.sha;
-      const updated = wf.text.replace(/cron:\s*'[^']*'/, "cron: '" + sched + "'");
-      if (updated !== wf.text) {
-        await putFile('.github/workflows/' + WORKFLOW, updated, workflowSha, 'עדכון תדירות בדיקה מהדשבורד');
-      }
-      say(toastOk, 'ההגדרות נשמרו.');
-      closeSettings();
-    } catch (e) {
-      say(toastErr, 'השמירה נכשלה: ' + e.message);
-    } finally {
-      btn.disabled = false; btn.textContent = 'שמירת ההגדרות';
-    }
-  });
+  writeHistory(history);
+  await browser.close();
+  console.log(`\nסיום. זוהו שינויים ב-${changesFound} אתר/ים.`);
+}
 
-  // ===== סגירה כללית במקש Escape =====
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeLightbox(); closeSettings(); }
-  });
-
-  loadDashboard();
-</script>
-</body>
-</html>
+run();
