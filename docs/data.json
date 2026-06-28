@@ -2,6 +2,14 @@
   {
     "site": "homepage",
     "url": "https://www.highlife-glamour.co.il",
+    "time": "2026-06-28T05:39:02.329Z",
+    "numDiff": 2104,
+    "percentFromTop": 27,
+    "folder": "results/homepage__2026-06-28T05-39-01"
+  },
+  {
+    "site": "homepage",
+    "url": "https://www.highlife-glamour.co.il",
     "time": "2026-06-28T05:28:01.070Z",
     "numDiff": 1866,
     "percentFromTop": 25,
