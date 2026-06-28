@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "site": "homepage",
+    "url": "https://www.highlife-glamour.co.il",
+    "time": "2026-06-28T05:10:15.072Z",
+    "numDiff": 105935,
+    "percentFromTop": 25,
+    "folder": "results/homepage__2026-06-28T05-10-13"
+  }
+]
