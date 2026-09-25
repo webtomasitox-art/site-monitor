@@ -2,6 +2,14 @@
   {
     "site": "דף הבית",
     "url": "https://www.highlife-glamour.co.il",
+    "time": "2026-09-25T00:05:15.375Z",
+    "numDiff": 102273,
+    "percentFromTop": 9,
+    "folder": "results/דף הבית__2026-09-25T00-05-13"
+  },
+  {
+    "site": "דף הבית",
+    "url": "https://www.highlife-glamour.co.il",
     "time": "2026-09-24T18:34:41.264Z",
     "numDiff": 101800,
     "percentFromTop": 77,
@@ -230,13 +238,5 @@
     "numDiff": 32990,
     "percentFromTop": 77,
     "folder": "results/דף הבית__2026-09-08T09-37-34"
-  },
-  {
-    "site": "דף הבית",
-    "url": "https://www.highlife-glamour.co.il",
-    "time": "2026-09-08T00:29:24.946Z",
-    "numDiff": 32861,
-    "percentFromTop": 77,
-    "folder": "results/דף הבית__2026-09-08T00-29-23"
   }
 ]
