@@ -2,6 +2,22 @@
   {
     "site": "אנטי אייגינג",
     "url": "https://www.highlife-glamour.co.il/%D7%90%D7%A0%D7%98%D7%99-%D7%90%D7%99%D7%99%D7%92%D7%99%D7%A0%D7%92",
+    "time": "2026-11-04T08:08:34.594Z",
+    "numDiff": 356,
+    "percentFromTop": 92,
+    "folder": "results/אנטי אייגינג__2026-11-04T08-08-33"
+  },
+  {
+    "site": "דף הבית",
+    "url": "https://www.highlife-glamour.co.il",
+    "time": "2026-11-04T08:08:28.506Z",
+    "numDiff": 104093,
+    "percentFromTop": 77,
+    "folder": "results/דף הבית__2026-11-04T08-08-26"
+  },
+  {
+    "site": "אנטי אייגינג",
+    "url": "https://www.highlife-glamour.co.il/%D7%90%D7%A0%D7%98%D7%99-%D7%90%D7%99%D7%99%D7%92%D7%99%D7%A0%D7%92",
     "time": "2026-11-03T21:46:45.641Z",
     "numDiff": 356,
     "percentFromTop": 92,
@@ -222,21 +238,5 @@
     "numDiff": 101877,
     "percentFromTop": 77,
     "folder": "results/דף הבית__2026-10-26T17-26-45"
-  },
-  {
-    "site": "דף הבית",
-    "url": "https://www.highlife-glamour.co.il",
-    "time": "2026-10-26T11:15:01.757Z",
-    "numDiff": 101800,
-    "percentFromTop": 77,
-    "folder": "results/דף הבית__2026-10-26T11-15-00"
-  },
-  {
-    "site": "דף הבית",
-    "url": "https://www.highlife-glamour.co.il",
-    "time": "2026-10-26T05:12:52.573Z",
-    "numDiff": 111805,
-    "percentFromTop": 77,
-    "folder": "results/דף הבית__2026-10-26T05-12-51"
   }
 ]
